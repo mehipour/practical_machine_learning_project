@@ -1,0 +1,95 @@
+---
+title: "Practical Machine Learning-Course Project"
+author: "Mark Pour"
+date: "11/12/2019"
+output: html_document
+---
+
+
+# Summary and Objective
+
+Data were collected by a wearable sensors from 6 participants that were asked to performed various lifting exercises in 5 different ways (dataset available [here](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har). The goal of this project is to develop and train a classification machine learning algorithm that can identify the way these exercises were performed.
+
+## Data processing 
+First we add the necessary libraries.
+```{r setup, include=FALSE}
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+```
+We download the data from the webiste. and load the data into dataframes in R.
+```{r set work folder and download data, echo=FALSE}
+folder <- '/Users/mehipour/Documents/R-working directory/Coursera-R Programming/Course 8/Week 4'
+if (getwd()!=folder) {
+    setwd(folder)
+}
+download.file(url='https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', destfile='pml-training.csv')
+download.file(url='https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv', destfile='pml-testing.csv')
+training <- read.csv('pml-training.csv')
+testing <- read.csv('pml-testing.csv')
+```
+## Data Cleaning
+The dataset has 160 columns (158 features and 1 dependent variable). The data is in a standard tabular form. However, several columns contain 'NA' or no values. We remove them first. Also, for the purpose of this exercise, the date and time variables as well as the users are unlikley to be informative, therefore we remove them, which would leave us with 53 predictors. 
+```{r remove NAs}
+na_idx <- which(colSums(is.na(training) | training=="")> 0.95*dim(training)[2])
+training0 <- subset(training, select=-c(1:7,na_idx))
+```
+
+## Data Partitioning
+We dedicate 80% of the data to training the algorithm and will use the remaining for validation.
+```{r partition data}
+inTrain <- createDataPartition(training0$classe, p=0.8)[[1]]
+training1 <- training0[inTrain,]
+validation1 <- training0[-inTrain,]
+```
+
+## Feature Selection
+First we randomly select 2000 data points from the training dataset to perform a prelimiarny analysis for feature selection. We apply a decision tree model on this data and assess the importance of each variable as predictors.
+```{r feature selection 1}
+set.seed(2)
+idx <- sample(1:dim(training1)[1],2000)
+mdl_tree <- rpart(formula=classe~. , data=training1)
+var_importance <- varImp(mdl_tree) 
+var_importance_idx <- order(var_importance, decreasing=T)
+barplot(var_importance$Overall[var_importance_idx], names.arg = rownames(var_importance)[var_importance_idx], ylab='Variable Importance')
+```
+We see that the majority of the predictors have low importance, therefore, we only keep predictors with a variable importance of at least 10% of the maximum value. Here we have a list of the predictors. This would leave us with 27 predicotrs.
+
+```{r feature selection 2}
+important_vars_idx <- var_importance_idx[which(var_importance > 0.1* max(var_importance))]
+training2 <- training1[,c(important_vars_idx,dim(training1)[2])]
+names(training2[,-dim(training2)[2]])
+```
+
+## Random Forest Algorithm
+
+We use random forest algorithm to train model. We use this algorithm for robustness to missing data points and its ability to handle data with a large number of predictors. We see the error rate plot for different predictors and their average (different curves) as a function of the nubmer of trees used in the algorithm. It appears that the error rate reaches its minium after 40 trees.
+
+```{r train random forest}
+mdl_rf <- randomForest(formula=classe~., data=training2)
+plot(mdl_rf)
+```
+
+## Testing the Model
+
+First we test the model on our vaidation dataset. The confusion matrix shows that the algorithm performs very well with an overall accuracey of ~99%.
+
+```{r validation dataset}
+pred_validation <- predict(mdl_rf, validation1)
+validation_confusion_matrix <- confusionMatrix(pred_validation, validation1$classe)
+validation_confusion_matrix$table
+validation_confusion_matrix$overall[1]
+```
+
+Finally we apply the model on our test data.
+
+```{r test dataset}
+pred_testing <- predict(mdl_rf, testing)
+pred_testing
+```
+
