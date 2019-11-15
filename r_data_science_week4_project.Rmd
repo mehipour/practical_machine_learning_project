@@ -48,25 +48,32 @@ training1 <- training0[inTrain,]
 validation1 <- training0[-inTrain,]
 ```
 
-## Feature Selection
-First we randomly select 2000 data points from the training dataset to perform a prelimiarny analysis for feature selection. We apply a decision tree model on this data and assess the importance of each variable as predictors.
-```{r feature selection 1}
+## Preliminary Model and Feature Selection
+First we perform a preliminary analysis using decision tree model on this data. This shows that the accuracy of the model is ~74%, which is not great. 
+
+```{r preliminary model}
 set.seed(2)
-idx <- sample(1:dim(training1)[1],2000)
 mdl_tree <- rpart(formula=classe~. , data=training1)
+mdl_tree_accuracy <- confusionMatrix(predict(mdl_tree, type='class'),training1$classe)
+mdl_tree_accuracy$overall[1]
+```
+
+We attempt to use another model, but first we assess the importance of the variables in the tree model. 
+
+```{r feature selection 1}
 var_importance <- varImp(mdl_tree) 
 var_importance_idx <- order(var_importance, decreasing=T)
 barplot(var_importance$Overall[var_importance_idx], names.arg = rownames(var_importance)[var_importance_idx], ylab='Variable Importance')
 ```
-We see that the majority of the predictors have low importance, therefore, we only keep predictors with a variable importance of at least 10% of the maximum value. Here we have a list of the predictors. This would leave us with 27 predicotrs.
+We see that there are number of variables that have zero importance. We remove those to further simplify the model, which instead of 52 predictors, leaves us with 35, listed below:
 
 ```{r feature selection 2}
-important_vars_idx <- var_importance_idx[which(var_importance > 0.1* max(var_importance))]
+important_vars_idx <- var_importance_idx[which(var_importance > 0)]
 training2 <- training1[,c(important_vars_idx,dim(training1)[2])]
 names(training2[,-dim(training2)[2]])
 ```
 
-## Random Forest Algorithm
+## Final model: Random Forest Algorithm
 
 We use random forest algorithm to train model. We use this algorithm for robustness to missing data points and its ability to handle data with a large number of predictors. We see the error rate plot for different predictors and their average (different curves) as a function of the nubmer of trees used in the algorithm. It appears that the error rate reaches its minium after 40 trees.
 
